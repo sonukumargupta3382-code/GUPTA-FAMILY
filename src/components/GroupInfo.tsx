@@ -12,15 +12,18 @@ interface UserData {
 interface GroupInfoProps {
   user: any;
   onClose: () => void;
+  currentGroupName: string;
+  currentGroupImage: string;
+  onUpdateGroup: (name: string, image: string) => void;
 }
 
-export function GroupInfo({ user, onClose }: GroupInfoProps) {
+export function GroupInfo({ user, onClose, currentGroupName, currentGroupImage, onUpdateGroup }: GroupInfoProps) {
   const [users, setUsers] = useState<UserData[]>([]);
-  const [groupName, setGroupName] = useState("GUPTA FAMILY");
-  const [groupImage, setGroupImage] = useState("https://ui-avatars.com/api/?name=Gupta+Family&background=0D8ABC&color=fff");
+  const [groupName, setGroupName] = useState(currentGroupName);
+  const [groupImage, setGroupImage] = useState(currentGroupImage);
   
   const [isEditingName, setIsEditingName] = useState(false);
-  const [newGroupName, setNewGroupName] = useState(groupName);
+  const [newGroupName, setNewGroupName] = useState(currentGroupName);
   const [fullScreenImage, setFullScreenImage] = useState<string | null>(null);
   
   // My Profile Edit State
@@ -55,31 +58,30 @@ export function GroupInfo({ user, onClose }: GroupInfoProps) {
 
     fetchUsers();
 
-    // Fetch Group Info (Mocked or from a settings table if it existed)
-    // For now, we keep local state or could use a 'settings' table
-    const fetchGroupSettings = async () => {
-        const { data } = await supabase.from('settings').select('*').eq('id', 'group_info').single();
-        if (data) {
-            if (data.name) setGroupName(data.name);
-            if (data.photo_url) setGroupImage(data.photo_url);
-        }
-    };
-    fetchGroupSettings();
-
   }, []);
 
-  const handleUpdateGroupImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [previewGroupImage, setPreviewGroupImage] = useState<string | null>(null);
+  const [pendingGroupFile, setPendingGroupFile] = useState<File | null>(null);
+
+  const handleGroupImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setUploading(true);
-      try {
-        const fileExt = file.name.split('.').pop();
+        const file = e.target.files[0];
+        setPendingGroupFile(file);
+        setPreviewGroupImage(URL.createObjectURL(file));
+    }
+  };
+
+  const saveGroupImage = async () => {
+    if (!pendingGroupFile) return;
+    setUploading(true);
+    try {
+        const fileExt = pendingGroupFile.name.split('.').pop();
         const fileName = `group_icon_${Date.now()}.${fileExt}`;
         const filePath = `${fileName}`;
 
         const { error: uploadError } = await supabase.storage
             .from('chat-media')
-            .upload(filePath, file);
+            .upload(filePath, pendingGroupFile);
 
         if (uploadError) throw uploadError;
 
@@ -87,24 +89,23 @@ export function GroupInfo({ user, onClose }: GroupInfoProps) {
             .from('chat-media')
             .getPublicUrl(filePath);
         
-        // Update in Supabase (assuming a settings table, or just local state for this demo)
-        // await supabase.from('settings').upsert({ id: 'group_info', photo_url: publicUrl });
-        
         setGroupImage(publicUrl);
-      } catch (error) {
+        onUpdateGroup(groupName, publicUrl); // Update parent
+        setPreviewGroupImage(null);
+        setPendingGroupFile(null);
+    } catch (error) {
         console.error("Error updating group icon:", error);
         alert("Failed to update group icon.");
-      } finally {
+    } finally {
         setUploading(false);
-      }
     }
   };
 
   const handleUpdateGroupName = async () => {
     if (!newGroupName.trim()) return;
     try {
-        // await supabase.from('settings').upsert({ id: 'group_info', name: newGroupName });
         setGroupName(newGroupName);
+        onUpdateGroup(newGroupName, groupImage); // Update parent
         setIsEditingName(false);
     } catch (error) {
         console.error("Error updating group name:", error);
@@ -169,6 +170,36 @@ export function GroupInfo({ user, onClose }: GroupInfoProps) {
     }
   };
 
+  if (previewGroupImage) {
+      return (
+          <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4">
+              <h3 className="text-white text-lg font-bold mb-4">Preview Group Icon</h3>
+              <div className="relative w-64 h-64 rounded-full overflow-hidden border-4 border-[#00a884] shadow-2xl mb-8">
+                  <img src={previewGroupImage} alt="Preview" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex gap-4">
+                  <button 
+                    onClick={() => {
+                        setPreviewGroupImage(null);
+                        setPendingGroupFile(null);
+                    }}
+                    className="px-6 py-2 rounded-full bg-slate-700 text-white hover:bg-slate-600 transition-colors"
+                  >
+                      Cancel
+                  </button>
+                  <button 
+                    onClick={saveGroupImage}
+                    disabled={uploading}
+                    className="px-6 py-2 rounded-full bg-[#00a884] text-white hover:bg-[#008f70] transition-colors flex items-center gap-2"
+                  >
+                      {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Save
+                  </button>
+              </div>
+          </div>
+      );
+  }
+
   if (fullScreenImage) {
       return (
           <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setFullScreenImage(null)}>
@@ -203,7 +234,7 @@ export function GroupInfo({ user, onClose }: GroupInfoProps) {
                 />
                 <label className="absolute bottom-2 right-2 bg-[#00a884] text-white p-3 rounded-full cursor-pointer shadow-lg hover:bg-[#008f70] transition-colors">
                     <Camera className="w-6 h-6" />
-                    <input type="file" accept="image/*" className="hidden" onChange={handleUpdateGroupImage} disabled={uploading} />
+                    <input type="file" accept="image/*" className="hidden" onChange={handleGroupImageSelect} disabled={uploading} />
                 </label>
             </div>
             

@@ -6,7 +6,6 @@
 import React, { useState, useEffect, ErrorInfo } from 'react';
 import { supabase } from './lib/supabase';
 import { Auth } from './components/Auth';
-import { SecurityCheck } from './components/SecurityCheck';
 import { Chat } from './components/Chat';
 import { Loader2, AlertTriangle, Database } from 'lucide-react';
 
@@ -71,12 +70,11 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 
 function AppContent() {
   const [user, setUser] = useState<any | null>(null);
-  const [isUnlocked, setIsUnlocked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
   const [isSetupInProgress, setIsSetupInProgress] = useState(false);
   const [isConfigured, setIsConfigured] = useState(true);
-
+  
   useEffect(() => {
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -96,17 +94,6 @@ function AppContent() {
 
     return () => subscription.unsubscribe();
   }, [isSetupInProgress]);
-
-  // Lock app when visibility changes (background/foreground)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setIsUnlocked(false); // Lock when app goes to background
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
 
   if (loading) {
     return (
@@ -163,22 +150,12 @@ function AppContent() {
       onSetupComplete={(user) => {
         setIsSetupInProgress(false);
         setUser(user);
-        // Only unlock if signup was successful (user is not null)
-        if (user) {
-          setIsUnlocked(true);
-        }
       }}
       onLogin={(u, isSignup) => {
         setUser(u);
         setAuthError('');
-        // Unlock immediately after successful login (user just proved identity with password)
-        setIsUnlocked(true);
       }} 
     />;
-  }
-
-  if (!isUnlocked) {
-    return <SecurityCheck user={user} onUnlock={() => setIsUnlocked(true)} />;
   }
 
   return (

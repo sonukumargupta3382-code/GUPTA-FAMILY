@@ -37,6 +37,16 @@ export function Auth({ onLogin, error: propError, onError, onSetupStart, onSetup
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setProfilePhoto(file);
+      setPhotoPreview(URL.createObjectURL(file));
+    }
+  };
 
   const handleForgotPassword = async () => {
     if (!email) {
@@ -113,13 +123,35 @@ export function Auth({ onLogin, error: propError, onError, onSetupStart, onSetup
         if (onSetupStart) onSetupStart();
 
         setStatusMessage('Creating Account...');
+        
+        let photoUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
+
+        if (profilePhoto) {
+            setStatusMessage('Uploading Photo...');
+            const fileExt = profilePhoto.name.split('.').pop();
+            const fileName = `profile_${Date.now()}.${fileExt}`;
+            const filePath = `${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('chat-media')
+                .upload(filePath, profilePhoto);
+
+            if (!uploadError) {
+                const { data: { publicUrl } } = supabase.storage
+                    .from('chat-media')
+                    .getPublicUrl(filePath);
+                photoUrl = publicUrl;
+            }
+        }
+
+        setStatusMessage('Finalizing...');
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: cleanEmail,
           password: cleanPassword,
           options: {
             data: {
               display_name: name,
-              photo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+              photo_url: photoUrl
             }
           }
         });
@@ -134,7 +166,7 @@ export function Auth({ onLogin, error: propError, onError, onSetupStart, onSetup
              id: authData.user.id,
              email: cleanEmail,
              display_name: name,
-             photo_url: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`
+             photo_url: photoUrl
            });
            
            if (dbError) console.error("Error creating user profile:", dbError);
@@ -253,14 +285,6 @@ export function Auth({ onLogin, error: propError, onError, onSetupStart, onSetup
       {showSetupGuide && <SetupGuide onClose={() => setShowSetupGuide(false)} />}
       
       <div className="bg-slate-800 w-full max-w-md rounded-2xl shadow-xl overflow-hidden border border-slate-700 relative">
-        <button 
-            onClick={() => setShowSetupGuide(true)}
-            className="absolute top-4 right-4 text-indigo-200 hover:text-white transition-colors z-10"
-            title="Supabase Setup Guide"
-        >
-            <HelpCircle className="w-6 h-6" />
-        </button>
-
         <div className="bg-indigo-600 p-6 text-center">
           <h1 className="text-2xl font-bold text-white">GUPTA FAMILY</h1>
           <p className="text-indigo-200 text-sm mt-1">Connect with your loved ones</p>
@@ -280,6 +304,21 @@ export function Auth({ onLogin, error: propError, onError, onSetupStart, onSetup
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
               <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">Profile Photo</label>
+                <div className="flex items-center gap-4 mb-3">
+                    <div className="relative w-16 h-16 rounded-full overflow-hidden bg-slate-700 border-2 border-slate-600">
+                        {photoPreview ? (
+                            <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                            <User className="w-8 h-8 text-slate-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                        )}
+                    </div>
+                    <label className="cursor-pointer bg-slate-700 hover:bg-slate-600 text-white px-3 py-2 rounded-lg text-sm transition-colors">
+                        Choose Photo
+                        <input type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
+                    </label>
+                </div>
+
                 <label className="block text-sm font-medium text-slate-300 mb-1">Full Name</label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
